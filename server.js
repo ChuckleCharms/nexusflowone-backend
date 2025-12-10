@@ -6,7 +6,6 @@ import { pool } from "./config/db.js";
 
 // ROUTES
 import authRoutes from "./routes/auth.js";
-// (You can add more later: projects, workflows, etc.)
 
 dotenv.config();
 
@@ -15,7 +14,7 @@ const app = express();
 // --- CORS & JSON BODY PARSING ---
 app.use(
   cors({
-    origin: "*", // allow all origins (Vercel, custom domains, etc.)
+    origin: "*", // allow all origins (Vercel + nexusflowone.com)
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -23,15 +22,25 @@ app.use(
 
 app.use(express.json());
 
+// --- Simple DB test on startup ---
+(async () => {
+  try {
+    await pool.query("SELECT 1");
+    console.log("✅ Connected to Postgres");
+  } catch (err) {
+    console.error("❌ Database connection error:", err.message);
+  }
+})();
+
 // --- ROUTES ---
 app.use("/api/auth", authRoutes);
 
-// Simple root healthcheck
+// Healthcheck root
 app.get("/", (req, res) => {
   res.send("NexusFlow One Backend Running");
 });
 
-// Quick debug endpoint to test from browser
+// Debug ping
 app.get("/api/auth/ping", (req, res) => {
   res.json({
     ok: true,
@@ -41,5 +50,5 @@ app.get("/api/auth/ping", (req, res) => {
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
