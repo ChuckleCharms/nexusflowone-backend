@@ -1,4 +1,4 @@
-// routes/auth.js
+// backend/routes/auth.js
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -6,19 +6,19 @@ import { pool } from "../config/db.js";
 
 const router = express.Router();
 
-// Helper: ensure users table exists (run on first request)
+// Ensure `users` table exists
 async function ensureUsersTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
 }
 
-// POST /api/auth/signup
+// ---------- SIGNUP ----------
 router.post("/signup", async (req, res) => {
   try {
     await ensureUsersTable();
@@ -26,52 +26,44 @@ router.post("/signup", async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required" });
+      return res.status(400).json({ error: "Email and password required" });
     }
 
     // Check if user exists
-    const existing = await pool.query("SELECT id FROM users WHERE email = $1", [
-      email.toLowerCase(),
-    ]);
-
+    const existing = await pool.query(
+      "SELECT id FROM users WHERE email = $1",
+      [email]
+    );
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: "User already exists" });
     }
 
-    const hash = await bcrypt.hash(password, 10);
+    // Hash password
+    const hashed = await bcrypt.hash(password, 10);
 
+    // Insert
     const result = await pool.query(
-      `
-        INSERT INTO users (email, password_hash)
-        VALUES ($1, $2)
-        RETURNING id, email, created_at;
-      `,
-      [email.toLowerCase(), hash]
+      "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at",
+      [email, hashed]
     );
 
     const user = result.rows[0];
 
+    // Sign JWT
     const token = jwt.sign(
       { userId: user.id, email: user.email },
-      process.env.JWT_SECRET || "nexusflow-one-secret",
+      process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    return res.json({
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        created_at: user.created_at,
-      },
-    });
+    res.json({ user, token });
   } catch (err) {
     console.error("Signup error:", err);
-    return res.status(500).json({ error: "Signup failed" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// POST /api/auth/login
+// ---------- LOGIN ----------
 router.post("/login", async (req, res) => {
   try {
     await ensureUsersTable();
@@ -79,43 +71,44 @@ router.post("/login", async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required" });
+      return res.status(400).json({ error: "Email and password required" });
     }
 
     const result = await pool.query(
       "SELECT id, email, password_hash FROM users WHERE email = $1",
-      [email.toLowerCase()]
+      [email]
     );
 
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: "Invalid email or password" });
+      return res.status(400).json({ error: "Invalid credentials" });
     }
 
     const user = result.rows[0];
 
-    const ok = await bcrypt.compare(password, user.password_hash);
-    if (!ok) {
-      return res.status(401).json({ error: "Invalid email or password" });
+    const passwordOk = await bcrypt.compare(password, user.password_hash);
+    if (!passwordOk) {
+      return res.status(400).json({ error: "Invalid credentials" });
     }
 
     const token = jwt.sign(
       { userId: user.id, email: user.email },
-      process.env.JWT_SECRET || "nexusflow-one-secret",
+      process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    return res.json({
-      token,
+    res.json({
       user: {
         id: user.id,
         email: user.email,
       },
+      token,
     });
   } catch (err) {
     console.error("Login error:", err);
-    return res.status(500).json({ error: "Login failed" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 export default router;
+
 
