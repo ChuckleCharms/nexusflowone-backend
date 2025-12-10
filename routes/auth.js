@@ -49,10 +49,16 @@ router.post("/signup", async (req, res) => {
 
     const user = result.rows[0];
 
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      console.error("❌ JWT_SECRET is not set");
+      return res.status(500).json({ error: "Auth config not set" });
+    }
+
     // Sign JWT
     const token = jwt.sign(
       { userId: user.id, email: user.email },
-      process.env.JWT_SECRET,
+      jwtSecret,
       { expiresIn: "7d" }
     );
 
@@ -90,9 +96,15 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Invalid credentials" });
     }
 
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      console.error("❌ JWT_SECRET is not set");
+      return res.status(500).json({ error: "Auth config not set" });
+    }
+
     const token = jwt.sign(
       { userId: user.id, email: user.email },
-      process.env.JWT_SECRET,
+      jwtSecret,
       { expiresIn: "7d" }
     );
 
@@ -110,5 +122,4 @@ router.post("/login", async (req, res) => {
 });
 
 export default router;
-
 
